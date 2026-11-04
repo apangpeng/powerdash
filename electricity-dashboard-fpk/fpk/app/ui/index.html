@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>用电总览 · 电力监控看板</title>
+<link rel="stylesheet" href="https://miaoda.feishu.cn/fonts/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js" integrity="sha384-pPi0zxBAoDu6+JXW/C68UZLvBUUtU+7zonhif43rqj7pxsGyqyqzcian2Rj37Rss" crossorigin="anonymous"></script>
+<script src="data.js"></script>
+<style>
+  :root {
+    --bg: #0c1424;
+    --panel: #131e33;
+    --panel-alt: #0f1a2c;
+    --border: #22304a;
+    --border-soft: #1b2740;
+    --text: #e6eefc;
+    --text-dim: #8fa0c8;
+    --text-faint: #5d6f96;
+    --blue: #3d8bff;
+    --cyan: #37c4ff;
+    --amber: #f6b83d;
+    --red: #e84545;
+    --tou-jian: #ff5f57;
+    --tou-feng: #ffb020;
+    --tou-ping: #30c46a;
+    --tou-gu: #4da3ff;
+    --font: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); font-family: var(--font); font-weight: 400; }
+  body { min-height: 100vh; }
+  .num { font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+
+  .app { max-width: 1480px; margin: 0 auto; padding: 20px 24px 28px; }
+
+  /* ===== 顶栏 ===== */
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 4px 2px 18px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-mark {
+    width: 36px; height: 36px; border-radius: 9px; flex: none;
+    background: linear-gradient(135deg, var(--blue), var(--cyan));
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+  }
+  .brand-mark svg { width: 20px; height: 20px; }
+  .brand h1 { font-size: 22px; font-weight: 700; letter-spacing: .02em; }
+  .brand .sub { font-size: 12px; color: var(--text-faint); font-weight: 300; margin-top: 2px; }
+  .ver-chip {
+    display: inline-block; margin-left: 8px; padding: 1px 7px;
+    font-size: 11px; font-weight: 500; color: var(--accent);
+    border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 999px;
+    background: rgba(56, 189, 248, 0.08); vertical-align: 1px;
+  }
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+  .date-chip {
+    font-size: 13px; color: var(--text-dim);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; background: var(--panel-alt);
+  }
+  .pay-btn { display: none; }
+
+  .login-btn {
+    border: 1px solid #2f4b86; cursor: pointer;
+    background: transparent; color: #a9c6ff;
+    font-family: var(--font); font-size: 14px; font-weight: 500;
+    padding: 9px 18px; border-radius: 8px;
+    transition: background .18s ease, color .18s ease, border-color .18s ease;
+    min-width: 96px; text-align: center;
+  }
+  .login-btn:hover { background: rgba(61,139,255,.12); color: #cfe0ff; border-color: #3d8bff; }
+  .login-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  .login-btn:disabled { opacity: .65; cursor: wait; }
+  .login-btn.warn { color: #ff9a8f; border-color: #a53b33; }
+  .login-btn.warn:hover { background: rgba(255,90,80,.12); color: #ffb3ab; border-color: #e0554a; }
+
+  /* ===== 登录弹窗 ===== */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(4,8,18,.66);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .modal-overlay.hidden { display: none; }
+  .hidden { display: none !important; }
+  .smtp-box { margin-top: 2px; padding-left: 10px; border-left: 2px solid #2a3a5c; }
+  .modal {
+    width: 100%; max-width: 420px;
+    background: #141f36; border: 1px solid #2a3a5c; border-radius: 12px;
+    padding: 22px 22px 18px;
+    max-height: calc(100vh - 32px); overflow-y: auto;
+  }
+  .modal h3 { font-size: 17px; font-weight: 600; }
+  .modal .desc { font-size: 12px; color: var(--text-faint); margin-top: 6px; line-height: 1.6; }
+  .modal label { display: block; font-size: 13px; color: var(--text-dim); margin: 14px 0 6px; }
+  .modal input {
+    width: 100%; background: #0f1a2c; border: 1px solid #2a3a5c; border-radius: 8px;
+    color: var(--text); font-family: var(--font); font-size: 14px;
+    padding: 10px 12px; outline: none;
+  }
+  .modal input:focus { border-color: #3d8bff; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+  .modal-actions button {
+    border: none; cursor: pointer; font-family: var(--font); font-size: 14px; font-weight: 500;
+    padding: 9px 18px; border-radius: 8px;
+  }
+  .modal-actions .m-cancel { background: transparent; color: var(--text-dim); border: 1px solid #2a3a5c; }
+  .modal-actions .m-primary { background: var(--blue); color: #fff; }
+  .modal-actions .m-primary:hover { background: #2f7cf0; }
+  .modal-actions .m-test { background: #3d5b8f; color: #fff; }
+  .modal-actions .m-test:hover { background: #4a6ba8; }
+  .icon-btn { display: inline-flex; align-items: center; gap: 4px; background: transparent; border: 1px solid #2a3a5c; color: var(--text-dim); border-radius: 8px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+  .icon-btn:hover { color: #dfe7f5; border-color: #3d5b8f; }
+  .pass-hint { font-weight: 400; font-size: 12px; color: var(--text-faint); margin-left: 6px; }
+  .modal-actions button:disabled { opacity: .5; cursor: wait; }
+  .modal-status { margin-top: 14px; font-size: 12px; line-height: 1.6; min-height: 18px; }
+  .modal-status.err { color: #ff8f8f; }
+  .modal-status.info { color: #9fc0ff; }
+  .modal-status.ok { color: #6fd39a; }
+  .ai-preview {
+    margin-top: 12px; padding: 10px 12px; border: 1px solid #2a3a5c; border-radius: 8px;
+    background: #0b1220; color: #c9d6ea; font-size: 12.5px; line-height: 1.7;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .modal-step { display: none; }
+  .modal-step.show { display: block; }
+
+  /* ===== 数据缺失告警 ===== */
+  .warn-banner {
+    display: none; margin-bottom: 14px;
+    background: #3a2430; border: 1px solid #7a3b46; border-radius: 8px;
+    color: #ffd6d6; font-size: 13px; padding: 10px 14px;
+  }
+  .warn-banner.show { display: block; }
+
+  /* ===== KPI 指标条 ===== */
+  .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 16px; }
+  .kpi {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px 16px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .kpi .label { font-size: 13px; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
+  .kpi .value { font-size: 30px; font-weight: 700; line-height: 1.1; }
+  .kpi .unit { font-size: 14px; font-weight: 400; color: var(--text-dim); margin-left: 4px; }
+  .kpi .trend { font-size: 12px; color: var(--text-faint); }
+  .kpi .bar { height: 4px; border-radius: 2px; background: #1c2942; overflow: hidden; margin-top: 2px; }
+  .kpi .bar i { display: block; height: 100%; border-radius: 2px; }
+
+  /* ===== 主栅格 ===== */
+  .grid { display: grid; grid-template-columns: 1.22fr 1fr 1.14fr; gap: 14px; align-items: stretch; }
+  .col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 16px 14px; }
+  .panel h2 { font-size: 15px; font-weight: 500; color: var(--text); display: flex; align-items: center; justify-content: space-between; }
+  .panel h2 .note { font-size: 12px; font-weight: 400; color: var(--text-faint); display: none; }
+  .panel h2 .note.show { display: inline; }
+  .chart-box { width: 100%; min-height: 300px; }
+
+  /* 每日用电（左列主图） */
+  .panel.daily { padding-bottom: 8px; }
+  #chartDaily { height: 560px; }
+
+  /* 分时电量 */
+  #chartTou { height: 330px; }
+  .tou-legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 4px 2px 10px; font-size: 12px; color: var(--text-dim); }
+  .tou-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .tou-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
+  /* 本月用电小结 */
+  .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 6px 0 2px; }
+  .summary .item { border: 1px solid var(--border-soft); border-radius: 8px; background: var(--panel-alt); padding: 10px 12px; }
+  .summary .k { font-size: 12px; color: var(--text-dim); }
+  .summary .v { font-size: 18px; font-weight: 500; margin-top: 4px; }
+  .summary .v small { font-size: 12px; color: var(--text-faint); font-weight: 400; }
+  .summary .v .note { font-style: normal; color: var(--text-faint); font-size: 12px; font-weight: 400; margin-left: 6px; }
+
+  /* 右侧统计条 */
+  .stat-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat {
+    background: var(--panel-alt); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; min-width: 0;
+  }
+  .stat .k { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+  .stat .v { font-size: 21px; font-weight: 700; margin-top: 6px; white-space: nowrap; }
+  .stat .v small { font-size: 11px; color: var(--text-faint); font-weight: 400; margin-left: 2px; }
+
+  /* 每月电量与电费 */
+  #chartMonthly { height: 250px; }
+
+  /* 阶梯电费板块 */
+  .details-list { padding: 4px 0 2px; }
+  .details-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 4px; border-bottom: 1px solid var(--border-soft);
+  }
+  .details-row:last-child { border-bottom: none; }
+  .details-row .k { font-size: 13px; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
+  .details-row .v { font-size: 14px; font-weight: 500; }
+
+  .tier-board { padding: 14px 4px 12px; border-bottom: 1px solid var(--border-soft); }
+  .tier-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+  .tier-head .txt { font-size: 13px; color: var(--text-dim); }
+  .tier-head .txt b { color: var(--text-main); font-size: 15px; font-weight: 600; }
+  .tier-head .stage { font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+  .stage-1 { background: rgba(74, 222, 128, 0.14); color: #4ade80; }
+  .stage-2 { background: rgba(250, 204, 21, 0.14); color: #facc15; }
+  .stage-3 { background: rgba(248, 113, 113, 0.14); color: #f87171; }
+  .tier-bar { position: relative; height: 14px; border-radius: 999px; overflow: visible; background: var(--panel-2); display: flex; }
+  .tier-bar .seg { height: 100%; }
+  .tier-bar .s1 { background: linear-gradient(90deg, #22c55e, #4ade80); }
+  .tier-bar .s2 { background: linear-gradient(90deg, #eab308, #facc15); }
+  .tier-bar .s3 { background: linear-gradient(90deg, #ef4444, #f87171); flex: 1; }
+  .tier-bar .marker { position: absolute; top: -4px; bottom: -4px; width: 2px; background: #e2e8f0; box-shadow: 0 0 0 2px rgba(226, 232, 240, 0.25); }
+  .tier-bar .marker i { position: absolute; top: -4px; left: -4px; width: 10px; height: 10px; border-radius: 50%; background: #f8fafc; border: 2px solid #0ea5e9; }
+  .tier-scale { display: flex; justify-content: space-between; margin-top: 7px; font-size: 11px; color: var(--text-faint); }
+  .tier-split { margin-top: 9px; font-size: 12px; color: var(--text-dim); line-height: 1.6; }
+  .tier-split b { color: var(--text-main); font-weight: 600; }
+
+  .mask-star { color: var(--amber); margin-left: 2px; }
+
+  @media (max-width: 1100px) {
+    .grid { grid-template-columns: 1fr 1fr; }
+    .col-left { grid-column: 1 / -1; }
+    #chartDaily { height: 420px; }
+  }
+  @media (max-width: 768px) {
+    .app { padding: 16px 14px 22px; }
+    .topbar { flex-wrap: wrap; }
+    .grid { grid-template-columns: 1fr; }
+    .col-left { grid-column: auto; }
+    .kpi-row { grid-template-columns: repeat(3, 1fr); }
+    .kpi { padding: 12px 12px 14px; }
+    .kpi .value { font-size: 26px; }
+    .stat .v { font-size: 18px; }
+    #chartDaily { height: 340px; }
+    #chartTou { height: 300px; }
+    #chartMonthly { height: 260px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ===== 顶栏 ===== -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+      </div>
+      <div>
+        <h1 id="pageTitle">用电总览</h1>
+        <div class="sub" id="pageSub">家庭电力监控 · 国家电网账户 <span class="ver-chip" id="verChip"></span></div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="date-chip" id="dateChip">数据截至 --</span>
+      <button class="icon-btn" id="settingsBtn" type="button" title="设置">⚙ 设置</button>
+      <button class="login-btn" id="loginBtn" type="button">登录</button>
+    </div>
+  </header>
+
+  <div class="warn-banner" id="warnBanner">数据加载失败：未能读取 data.js（访问口令未通过或应用服务异常）。请先完成口令验证后重试；若持续出现，请改用 http://NAS_IP:8776/ 打开页面。</div>
+
+  <!-- ===== KPI 指标条 ===== -->
+  <section class="kpi-row" id="kpiRow"></section>
+
+  <!-- ===== 主栅格 ===== -->
+  <main class="grid">
+
+    <!-- 左列：每日用电量 -->
+    <div class="col col-left">
+      <section class="panel daily">
+        <h2>每日用电量（近两个月）<span class="note" id="dailyNote">示例数据</span></h2>
+        <div class="chart-box" id="chartDaily"></div>
+      </section>
+    </div>
+
+    <!-- 中列：分时电量 + 本月用电小结 -->
+    <div class="col">
+      <section class="panel">
+        <h2>分时电量（尖/峰/平/谷）<span class="note" id="touNote">示例数据</span></h2>
+        <div class="chart-box" id="chartTou"></div>
+        <div class="tou-legend">
+          <span><i style="background:var(--tou-jian)"></i>尖</span>
+          <span><i style="background:var(--tou-feng)"></i>峰</span>
+          <span><i style="background:var(--tou-ping)"></i>平</span>
+          <span><i style="background:var(--tou-gu)"></i>谷</span>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>本月用电小结</h2>
+        <div class="summary" id="summaryBox"></div>
+      </section>
+    </div>
+
+    <!-- 右列：统计条 + 月度图表 + 账户明细 -->
+    <div class="col">
+      <div class="stat-strip" id="statStrip"></div>
+      <section class="panel">
+        <h2>每月电量与电费 <span class="note" id="monthlyNote">示例数据</span></h2>
+        <div class="chart-box" id="chartMonthly"></div>
+      </section>
+      <section class="panel">
+        <h2>阶梯电费</h2>
+        <div class="details-list" id="detailsList"></div>
+      </section>
+    </div>
+
+  </main>
+
+</div>
+
+<div class="modal-overlay hidden" id="loginModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle">
+    <h3 id="loginModalTitle">网上国网登录</h3>
+    <div class="desc">填写网上国网账号，一键获取用电数据并更新本页。<br>账号密码仅保存在本机 config.json，不会上传到任何服务器。</div>
+    <div class="modal-step show" id="loginStep1">
+      <label for="loginPhone">手机号</label>
+      <input id="loginPhone" type="tel" inputmode="numeric" autocomplete="username" placeholder="网上国网登录手机号">
+      <label for="loginPassword">密码</label>
+      <input id="loginPassword" type="password" autocomplete="current-password" placeholder="网上国网登录密码">
+      <div class="modal-actions">
+        <button type="button" class="m-cancel" id="loginCancel">取消</button>
+        <button type="button" class="m-primary" id="loginSubmit">登录并获取</button>
+      </div>
+    </div>
+    <div class="modal-step" id="loginStep2">
+      <div class="desc" id="smsHint">验证码已发送到手机号，请查收短信。</div>
+      <label for="loginCode">短信验证码</label>
+      <input id="loginCode" type="text" inputmode="numeric" maxlength="6" placeholder="6 位数字">
+      <div class="modal-actions">
+        <button type="button" class="m-cancel" id="codeCancel">取消</button>
+        <button type="button" class="m-primary" id="codeSubmit">提交验证码</button>
+      </div>
+    </div>
+    <div class="modal-status" id="loginStatus"></div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="settingsModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+    <h3 id="settingsModalTitle">设置 · 推送 &amp; AI 解读</h3>
+    <div class="desc">每天 08:00 自动获取数据，并按你选择的频率发邮件：<strong>每周</strong>（周一发周报，推荐）/ <strong>每天</strong> / <strong>仅异常</strong>（余额不足、登录失效才提醒）。登录失效提醒任何模式都会发。<br>QQ 邮箱需先在「设置 → 账户」开启 SMTP 服务，用生成的<strong>授权码</strong>（不是 QQ 密码）；服务商点选即可，无需手输。</div>
+    <label for="pushFreq">推送频率</label>
+    <select id="pushFreq">
+      <option value="weekly">每周（周一发周报，推荐）</option>
+      <option value="daily">每天</option>
+      <option value="alert">仅异常提醒</option>
+    </select>
+    <label for="pushProvider">SMTP 服务商</label>
+    <select id="pushProvider">
+      <option value="qq">QQ 邮箱（默认）</option>
+      <option value="163">163 邮箱</option>
+      <option value="custom">自定义</option>
+    </select>
+    <div class="smtp-box hidden" id="pushSmtpBox">
+      <label for="pushSmtpHost">SMTP 服务器</label>
+      <input id="pushSmtpHost" type="text" autocomplete="off" placeholder="smtp.qq.com">
+      <label for="pushSmtpPort">端口</label>
+      <input id="pushSmtpPort" type="number" min="1" max="65535" placeholder="465">
+    </div>
+    <label for="pushSmtpUser">发件邮箱</label>
+    <input id="pushSmtpUser" type="text" autocomplete="off" placeholder="你的QQ号@qq.com">
+    <label for="pushSmtpPass">授权码<span class="pass-hint" id="passHint"></span></label>
+    <input id="pushSmtpPass" type="password" autocomplete="new-password" placeholder="已设置时留空保持不变">
+    <label for="pushMailTo">收件邮箱</label>
+    <input id="pushMailTo" type="text" autocomplete="off" placeholder="可填同发件邮箱">
+    <label for="pushThreshold">余额提醒阈值（元）</label>
+    <input id="pushThreshold" type="number" min="0" step="0.01" placeholder="0 = 不提醒">
+    <div class="desc" style="margin-top:6px">「仅异常」模式下余额低于此值时发提醒邮件；其他模式可留 0。</div>
+
+    <h3 style="margin-top:24px;font-size:15px">AI 用电解读（可选）</h3>
+    <div class="desc">开启后，周报/日报邮件末尾会附一段 AI 生成的解读（趋势、异常、省电建议）。只上传用电数据，账号密码、访问口令与邮箱授权码不会上传；需自行申请云端大模型 API Key。</div>
+    <label for="aiEnabled">启用 AI 解读</label>
+    <select id="aiEnabled">
+      <option value="0">关闭（默认）</option>
+      <option value="1">开启</option>
+    </select>
+    <label for="aiProvider">服务商</label>
+    <select id="aiProvider">
+      <option value="deepseek">DeepSeek（默认）</option>
+      <option value="qwen">通义千问</option>
+      <option value="doubao">豆包 · 火山方舟</option>
+      <option value="custom">自定义（OpenAI 兼容）</option>
+    </select>
+    <div class="smtp-box hidden" id="aiCustomBox">
+      <label for="aiBaseUrl">API 地址（Base URL）</label>
+      <input id="aiBaseUrl" type="text" autocomplete="off" placeholder="https://api.deepseek.com/v1">
+    </div>
+    <label for="aiModel">模型</label>
+    <input id="aiModel" type="text" autocomplete="off" placeholder="deepseek-chat">
+    <label for="aiKey">API Key<span class="pass-hint" id="aiKeyHint"></span></label>
+    <input id="aiKey" type="password" autocomplete="new-password" placeholder="已设置时留空保持不变">
+    <div class="modal-actions" style="margin-top:14px">
+      <button type="button" class="m-test" id="aiTest">测试 AI 解读</button>
+    </div>
+    <div class="modal-status" id="aiStatus"></div>
+    <div class="ai-preview hidden" id="aiPreview"></div>
+    <div class="modal-actions">
+      <button type="button" class="m-cancel" id="pushCancel">取消</button>
+      <button type="button" class="m-test" id="pushTest">发送测试邮件</button>
+      <button type="button" class="m-primary" id="pushSave">保存</button>
+    </div>
+    <div class="modal-status" id="pushStatus"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var D = window.DASHBOARD_DATA;
+  if (!D) {
+    document.getElementById("warnBanner").classList.add("show");
+    return;
+  }
+
+  /* ===== 通用渲染工具 ===== */
+  function fmtNum(v) {
+    if (v === null || v === undefined || (typeof v === "number" && isNaN(v))) return "—";
+    if (typeof v === "string") return v;
+    var n = Math.round(v * 100) / 100;
+    return n.toLocaleString("zh-CN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+  function withUnit(v, unit) {
+    var s = fmtNum(v);
+    if (s === "—") return s;
+    if (unit === "元") return "¥" + s;
+    return s;
+  }
+  function starSpan(masked) {
+    return masked ? '<span class="mask-star">*</span>' : "";
+  }
+  function setNote(elId, mock) {
+    var el = document.getElementById(elId);
+    if (el) el.classList.toggle("show", !!mock);
+  }
+
+  /* ===== 顶栏 ===== */
+  document.getElementById("pageTitle").textContent = D.meta.title || "用电总览";
+  document.getElementById("dateChip").textContent = "数据截至 " + (D.meta.asOf || "--");
+  /* 顶栏登录按钮状态化：由 /api/status 驱动（版本号角标同源）。
+     函数定义在本 script 块内，通过 window 暴露给登录流程所在的下一块使用
+     （函数声明不跨 script 提升，不能依赖隐式全局）。 */
+  function applyTopbarStatus(s) {
+    var chip = document.getElementById("dateChip");
+    if (chip && s && s.asOf) chip.textContent = "数据截至 " + s.asOf;
+    var btn = document.getElementById("loginBtn");
+    if (!btn) return;
+    if (s && s.busy) {
+      btn.textContent = "获取中…";
+      btn.disabled = true;
+      btn.classList.remove("warn");
+      return;
+    }
+    btn.disabled = false;
+    if (s && s.config_filled && s.phone_masked) {
+      btn.textContent = s.phone_masked;
+      btn.classList.toggle("warn", !s.token_valid);
+      btn.title = s.token_valid ? "点击重新登录或更换账号" : "登录已失效，点击重新登录";
+    } else {
+      btn.textContent = "登录";
+      btn.classList.remove("warn");
+      btn.title = "";
+    }
+  }
+  window.__pd_applyTopbar = applyTopbarStatus;
+  window.__pd_status = {};
+  fetch("api/status")
+    .then(function (r) { return r.json(); })
+    .then(function (s) {
+      window.__pd_status = s;
+      var el = document.getElementById("verChip");
+      if (el && s.version) el.textContent = "v" + s.version;
+      applyTopbarStatus(s);
+    })
+    .catch(function () {});
+
+  /* ===== KPI 指标条（v1.2.7 起瘦身为 4 个核心指标） ===== */
+  // 本月用电/最新日用电 + 日均用电/当前余额；预计月末与上月结余保留在
+  // 下方「本月用电小结」，避免与顶部重复展示。
+  var kpiRow = document.getElementById("kpiRow");
+  var kpiItems = [];
+  (D.kpis || []).forEach(function (k) {
+    if (k.label === "账户余额") return;   // 去重：余额统一用小结里的「当前余额」
+    kpiItems.push(k);
+  });
+  (D.summary || []).forEach(function (s) {
+    if (s.k === "日均用电" || s.k === "当前余额") {
+      kpiItems.push({ label: s.k, value: s.v, unit: s.unit, trend: "", bar: 0, masked: s.masked });
+    }
+  });
+  kpiItems.forEach(function (k) {
+    var card = document.createElement("div");
+    card.className = "kpi";
+    card.innerHTML =
+      '<div class="label">' + k.label + starSpan(k.masked) + '</div>' +
+      '<div class="value num">' + fmtNum(k.value) + ' <span class="unit">' + (k.unit || "") + '</span></div>' +
+      '<div class="trend">' + (k.trend || "") + '</div>' +
+      '<div class="bar"><i style="width:' + (k.bar || 0) + '%; background:linear-gradient(90deg,#3d8bff,#37c4ff)"></i></div>';
+    kpiRow.appendChild(card);
+  });
+
+  /* ===== 本月用电小结 ===== */
+  var summaryBox = document.getElementById("summaryBox");
+  (D.summary || []).forEach(function (s) {
+    if (s.k === "日均用电" || s.k === "当前余额") return;   // 已并入顶部 KPI
+    var item = document.createElement("div");
+    item.className = "item";
+    var hasUnit = s.unit && s.v !== null && s.v !== undefined;
+    var note = s.k === "上月结余" ? '<small class="note">上期预存余额</small>' : "";
+    item.innerHTML =
+      '<div class="k">' + s.k + starSpan(s.masked) + '</div>' +
+      '<div class="v num">' + withUnit(s.v, s.unit) + (hasUnit ? ' <small>' + s.unit + '</small>' : '') + note + '</div>';
+    summaryBox.appendChild(item);
+  });
+
+  /* ===== 右侧统计条 ===== */
+  var statStrip = document.getElementById("statStrip");
+  (D.stats || []).forEach(function (s) {
+    var div = document.createElement("div");
+    div.className = "stat";
+    var hasUnit = s.unit && s.v !== null && s.v !== undefined;
+    div.innerHTML =
+      '<div class="k">' + s.k + starSpan(s.masked) + '</div>' +
+      '<div class="v num">' + withUnit(s.v, s.unit) + (hasUnit ? ' <small>' + s.unit + '</small>' : '') + '</div>';
+    statStrip.appendChild(div);
+  });
+
+  /* ===== 阶梯电费板块 ===== */
+  var detailsList = document.getElementById("detailsList");
+  function numText(v) {
+    if (v === null || v === undefined || isNaN(v)) return "—";
+    var n = Math.round(v * 100) / 100;
+    return n.toLocaleString("zh-CN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+  if (D.tier) {
+    var t = D.tier;
+    var MAX = Math.max(t.caps[1] * 1.3, t.accum * 1.05, 2640);
+    var p1 = (t.caps[0] / MAX * 100).toFixed(2);
+    var p2 = ((t.caps[1] - t.caps[0]) / MAX * 100).toFixed(2);
+    var pos = Math.min(99.5, (t.accum / MAX * 100)).toFixed(2);
+    var splitParts = [];
+    if (t.usage_split[1] > 0) splitParts.push("二档 " + numText(t.usage_split[1]) + " kWh");
+    if (t.usage_split[2] > 0) splitParts.push("三档 " + numText(t.usage_split[2]) + " kWh");
+    var splitTxt = splitParts.length
+      ? '上月账单 <b>' + numText(t.month_usage) + '</b> kWh = <b>' + splitParts.join(" + ") + '</b>'
+      : "";
+    var board = document.createElement("div");
+    board.className = "tier-board";
+    board.innerHTML =
+      '<div class="tier-head">' +
+        '<span class="txt">年累计 <b>' + numText(t.accum) + '</b> kWh</span>' +
+        '<span class="stage stage-' + t.stage + '">' + t.stage_label + '</span>' +
+      '</div>' +
+      '<div class="tier-bar">' +
+        '<div class="seg s1" style="width:' + p1 + '%"></div>' +
+        '<div class="seg s2" style="width:' + p2 + '%"></div>' +
+        '<div class="seg s3"></div>' +
+        '<div class="marker" style="left:' + pos + '%"><i></i></div>' +
+      '</div>' +
+      '<div class="tier-scale">' +
+        '<span>0</span><span>' + numText(t.caps[0]) + '</span>' +
+        '<span>' + numText(t.caps[1]) + '</span><span>全年</span>' +
+      '</div>' +
+      (splitTxt ? '<div class="tier-split">' + splitTxt + '</div>' : "");
+    detailsList.appendChild(board);
+  }
+  (D.details || []).forEach(function (row) {
+    var div = document.createElement("div");
+    div.className = "details-row";
+    div.innerHTML =
+      '<span class="k">' + row.k + '</span>' +
+      '<span class="v num">' + withUnit(row.v, row.unit) + starSpan(row.masked) + '</span>';
+    detailsList.appendChild(div);
+  });
+
+  /* ===== 示例数据角标 ===== */
+  var mock = !!D.meta.mock;
+  setNote("dailyNote", mock);
+  setNote("touNote", mock);
+  setNote("monthlyNote", mock);
+
+  /* ===== 图表 ===== */
+  var axisText = "#8fa0c8";
+  var axisLine  = "rgba(143,160,200,.18)";
+  var splitLine = "rgba(143,160,200,.09)";
+
+  function baseTooltip(extra) {
+    return Object.assign({
+      backgroundColor: "#1b2740",
+      borderColor: "#2a3a5c",
+      textStyle: { color: "#e6eefc", fontSize: 13 },
+      confine: true
+    }, extra || {});
+  }
+
+  function mountChart(id, option) {
+    var el = document.getElementById(id);
+    if (!el || !window.echarts) return;
+    var chart = echarts.init(el);
+    chart.setOption(option);
+    new ResizeObserver(function () { chart.resize(); }).observe(el);
+  }
+
+  var charts = D.charts || {};
+
+  /* 图表一：每日用电量 */
+  var daily = charts.daily || { labels: [], values: [] };
+  mountChart("chartDaily", {
+    tooltip: baseTooltip({
+      trigger: "axis",
+      axisPointer: { type: "shadow", shadowStyle: { color: "rgba(61,139,255,.08)" } },
+      formatter: function (params) {
+        var p = params[0];
+        return p.axisValue + "<br/>用电量 <b>" + fmtNum(p.value) + "</b> kWh";
+      }
+    }),
+    grid: { left: 8, right: 12, top: 34, bottom: 14, containLabel: true },
+    xAxis: {
+      type: "category", data: daily.labels, boundaryGap: true,
+      axisLine: { lineStyle: { color: axisLine } },
+      axisTick: { show: false },
+      axisLabel: {
+        color: axisText, fontSize: 11,
+        interval: Math.max(0, Math.ceil(daily.labels.length / 10) - 1),
+        rotate: 45
+      }
+    },
+    yAxis: {
+      type: "value", name: "kWh", nameTextStyle: { color: axisText, fontSize: 11 },
+      splitLine: { lineStyle: { color: splitLine } },
+      axisLabel: { color: axisText, fontSize: 11 }
+    },
+    series: [{
+      name: "每日用电量",
+      type: "bar",
+      data: daily.values,
+      barMaxWidth: 16,
+      itemStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: "#37c4ff" },
+          { offset: 1, color: "#1d5fd0" }
+        ]),
+        borderRadius: [3, 3, 0, 0]
+      }
+    }]
+  });
+
+  /* 图表二：分时电量（尖/峰/平/谷，堆叠） */
+  var tou = charts.tou || { labels: [], jian: [], feng: [], ping: [], gu: [] };
+  var touSeries = [
+    { name: "尖", type: "bar", stack: "tou", data: tou.jian, itemStyle: { color: "#ff5f57", borderRadius: [3, 3, 0, 0] }, barMaxWidth: 16 },
+    { name: "峰", type: "bar", stack: "tou", data: tou.feng, itemStyle: { color: "#ffb020" }, barMaxWidth: 16 },
+    { name: "平", type: "bar", stack: "tou", data: tou.ping, itemStyle: { color: "#30c46a" }, barMaxWidth: 16 },
+    { name: "谷", type: "bar", stack: "tou", data: tou.gu,   itemStyle: { color: "#4da3ff" }, barMaxWidth: 16 }
+  ];
+  mountChart("chartTou", {
+    tooltip: baseTooltip({
+      trigger: "axis",
+      axisPointer: { type: "shadow", shadowStyle: { color: "rgba(61,139,255,.08)" } },
+      formatter: function (params) {
+        var total = 0, html = params[0].axisValue + "<br/>";
+        params.forEach(function (p) { total += p.value; html += p.marker + p.seriesName + " " + fmtNum(p.value) + " kWh<br/>"; });
+        html += "<b>合计 " + fmtNum(total) + " kWh</b>";
+        return html;
+      }
+    }),
+    // v1.2.8：不启用 ECharts 自带图例，使用面板内 HTML 图例（避免重复两行）
+    grid: { left: 8, right: 12, top: 34, bottom: 24, containLabel: true },
+    xAxis: {
+      type: "category", data: tou.labels, boundaryGap: true,
+      axisLine: { lineStyle: { color: axisLine } },
+      axisTick: { show: false },
+      axisLabel: {
+        color: axisText, fontSize: 11,
+        interval: Math.max(0, Math.ceil(tou.labels.length / 10) - 1),
+        rotate: 45
+      }
+    },
+    yAxis: {
+      type: "value", name: "kWh", nameTextStyle: { color: axisText, fontSize: 11 },
+      splitLine: { lineStyle: { color: splitLine } },
+      axisLabel: { color: axisText, fontSize: 11 }
+    },
+    series: touSeries
+  });
+
+  /* 图表三：每月电量与电费（双轴） */
+  var monthly = charts.monthly || { labels: [], energy: [], fee: [] };
+  mountChart("chartMonthly", {
+    tooltip: baseTooltip({
+      trigger: "axis",
+      axisPointer: { type: "shadow", shadowStyle: { color: "rgba(61,139,255,.08)" } },
+      formatter: function (params) {
+        var html = params[0].axisValue + "<br/>";
+        params.forEach(function (p) {
+          var unit = p.seriesName === "月电量" ? " kWh" : " 元";
+          html += p.marker + p.seriesName + " " + fmtNum(p.value) + unit + "<br/>";
+        });
+        return html;
+      }
+    }),
+    legend: { bottom: 0, left: 0, type: "scroll", itemWidth: 10, itemHeight: 8, textStyle: { color: axisText, fontSize: 12 }, icon: "rect" },
+    grid: { left: 8, right: 8, top: 34, bottom: 26, containLabel: true },
+    xAxis: {
+      type: "category", data: monthly.labels, boundaryGap: true,
+      axisLine: { lineStyle: { color: axisLine } },
+      axisTick: { show: false },
+      axisLabel: { color: axisText, fontSize: 12 }
+    },
+    yAxis: [
+      {
+        type: "value", name: "kWh", nameTextStyle: { color: axisText, fontSize: 11 },
+        splitLine: { lineStyle: { color: splitLine } },
+        axisLabel: { color: axisText, fontSize: 11 }
+      },
+      {
+        type: "value", name: "元", nameTextStyle: { color: axisText, fontSize: 11 },
+        splitLine: { show: false },
+        axisLabel: { color: axisText, fontSize: 11 }
+      }
+    ],
+    series: [
+      {
+        name: "月电量",
+        type: "bar",
+        data: monthly.energy,
+        barMaxWidth: 28,
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: "#3d8bff" },
+            { offset: 1, color: "#2050b0" }
+          ]),
+          borderRadius: [3, 3, 0, 0]
+        }
+      },
+      {
+        name: "月电费",
+        type: "line",
+        yAxisIndex: 1,
+        data: monthly.fee,
+        symbol: "circle",
+        symbolSize: 7,
+        lineStyle: { color: "#f6b83d", width: 2 },
+        itemStyle: { color: "#f6b83d" }
+      }
+    ]
+  });
+})();
+</script>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ===== 网页一键登录（配合 serve_dashboard.py 本地服务） ===== */
+  var modal = document.getElementById("loginModal");
+  var step1 = document.getElementById("loginStep1");
+  var step2 = document.getElementById("loginStep2");
+  var statusEl = document.getElementById("loginStatus");
+  var smsHintEl = document.getElementById("smsHint");
+  var btnLogin = document.getElementById("loginBtn");
+  var btnCancel = document.getElementById("loginCancel");
+  var btnCodeCancel = document.getElementById("codeCancel");
+  var btnSubmit = document.getElementById("loginSubmit");
+  var btnCodeSubmit = document.getElementById("codeSubmit");
+  var phoneEl = document.getElementById("loginPhone");
+  var passEl = document.getElementById("loginPassword");
+  var codeEl = document.getElementById("loginCode");
+
+  function apiUrl(path) {
+    var p = path.replace(/^\//, "");
+    return (location.protocol === "file:" ? "http://127.0.0.1:8776/" : "") + p;
+  }
+  function setStatus(text, cls) {
+    statusEl.textContent = text || "";
+    statusEl.className = "modal-status" + (cls ? " " + cls : "");
+  }
+  function setBusy(on) {
+    btnSubmit.disabled = on;
+    btnCodeSubmit.disabled = on;
+    btnCancel.disabled = on;
+    btnCodeCancel.disabled = on;
+  }
+  function topbarBusy(on) {
+    var btn = document.getElementById("loginBtn");
+    if (!btn) return;
+    if (on) {
+      btn.textContent = "获取中…";
+      btn.disabled = true;
+      btn.classList.remove("warn");
+    } else if (window.__pd_applyTopbar) {
+      window.__pd_applyTopbar(window.__pd_status || {});
+    } else {
+      btn.textContent = "登录";
+      btn.disabled = false;
+    }
+  }
+  function showStep(n) {
+    step1.classList.toggle("show", n === 1);
+    step2.classList.toggle("show", n === 2);
+  }
+  function closeModal() {
+    modal.classList.add("hidden");
+    setBusy(false);
+  }
+  function openModal() {
+    modal.classList.remove("hidden");
+    showStep(1);
+    codeEl.value = "";
+    setStatus("");
+    fetch(apiUrl("/api/status"))
+      .then(function (r) { return r.json(); })
+      .then(function (s) {
+        if (s.config_filled && s.phone_masked) {
+          setStatus("已配置账号 " + s.phone_masked + "。可直接重新登录获取，或更换账号。", "info");
+        }
+      })
+      .catch(function () {
+        setStatus("未检测到本地服务。请先运行 python serve_dashboard.py，再用浏览器打开 http://127.0.0.1:8776/ 使用登录功能。", "err");
+      });
+  }
+
+  btnLogin.addEventListener("click", openModal);
+  btnCancel.addEventListener("click", closeModal);
+  btnCodeCancel.addEventListener("click", closeModal);
+  modal.addEventListener("click", function (e) { if (e.target === modal) closeModal(); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) closeModal();
+  });
+
+  function maskPhone(p) {
+    return p.replace(/^(\d{3})\d{4}(\d{4})$/, "$1****$2");
+  }
+
+  btnSubmit.addEventListener("click", function () {
+    var phone = phoneEl.value.trim();
+    var password = passEl.value;
+    if (!phone || !password) { setStatus("请填写手机号和密码。", "err"); return; }
+    setBusy(true);
+    topbarBusy(true);
+    setStatus("正在登录并获取数据，请稍候……", "info");
+    fetch(apiUrl("/api/login"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: phone, password: password })
+    }).then(function (r) { return r.json(); }).then(function (res) {
+      setBusy(false);
+      if (res.status === "ok") {
+        setStatus("登录成功，数据已更新。", "ok");
+        setTimeout(function () { location.reload(); }, 900);
+      } else if (res.status === "need_sms") {
+        topbarBusy(false);
+        smsHintEl.textContent = "验证码已发送到 " + maskPhone(phone) + "，请查收短信并输入。";
+        showStep(2);
+        setStatus("");
+        codeEl.focus();
+      } else {
+        topbarBusy(false);
+        var tail = res.output ? res.output.split("\n").slice(-2).join(" ") : "";
+        setStatus(res.message + (tail ? "　" + tail : ""), "err");
+      }
+    }).catch(function () {
+      setBusy(false);
+      topbarBusy(false);
+      setStatus("无法连接本地服务。请确认 serve_dashboard.py 正在运行。", "err");
+    });
+  });
+
+  btnCodeSubmit.addEventListener("click", submitCode);
+  function submitCode() {
+    var code = codeEl.value.trim();
+    if (!/^\d{6}$/.test(code)) { setStatus("请输入 6 位数字验证码。", "err"); return; }
+    setBusy(true);
+    topbarBusy(true);
+    setStatus("正在验证并获取数据……", "info");
+    fetch(apiUrl("/api/code"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code })
+    }).then(function (r) { return r.json(); }).then(function (res) {
+      setBusy(false);
+      if (res.status === "ok") {
+        setStatus("登录成功，数据已更新。", "ok");
+        setTimeout(function () { location.reload(); }, 900);
+      } else {
+        topbarBusy(false);
+        var tail = res.output ? res.output.split("\n").slice(-2).join(" ") : "";
+        setStatus(res.message + (tail ? "　" + tail : ""), "err");
+      }
+    }).catch(function () {
+      setBusy(false);
+      topbarBusy(false);
+      setStatus("无法连接本地服务。请确认 serve_dashboard.py 正在运行。", "err");
+    });
+  }
+
+  passEl.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); btnSubmit.click(); }
+  });
+  codeEl.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); submitCode(); }
+  });
+
+  /* ===== 设置弹窗（邮件推送配置，v1.2.6 / v1.3.0 频率+SMTP下拉） ===== */
+  var sModal = document.getElementById("settingsModal");
+  var sBtn = document.getElementById("settingsBtn");
+  var sFreq = document.getElementById("pushFreq");
+  var sProvider = document.getElementById("pushProvider");
+  var sBox = document.getElementById("pushSmtpBox");
+  var sHost = document.getElementById("pushSmtpHost");
+  var sPort = document.getElementById("pushSmtpPort");
+  var sUser = document.getElementById("pushSmtpUser");
+  var sPass = document.getElementById("pushSmtpPass");
+  var sTo = document.getElementById("pushMailTo");
+  var sThreshold = document.getElementById("pushThreshold");
+  var sPassHint = document.getElementById("passHint");
+  var sStatus = document.getElementById("pushStatus");
+  var sSave = document.getElementById("pushSave");
+  var sTest = document.getElementById("pushTest");
+  var sCancel = document.getElementById("pushCancel");
+  var aiEnabled = document.getElementById("aiEnabled");
+  var aiProvider = document.getElementById("aiProvider");
+  var aiCustomBox = document.getElementById("aiCustomBox");
+  var aiBaseUrl = document.getElementById("aiBaseUrl");
+  var aiModel = document.getElementById("aiModel");
+  var aiKey = document.getElementById("aiKey");
+  var aiKeyHint = document.getElementById("aiKeyHint");
+  var aiStatus = document.getElementById("aiStatus");
+  var aiPreview = document.getElementById("aiPreview");
+  var aiTest = document.getElementById("aiTest");
+
+  var PROVIDERS = { qq: ["smtp.qq.com", 465], "163": ["smtp.163.com", 465] };
+
+  var AI_PROVIDERS = {
+    deepseek: ["https://api.deepseek.com/v1", "deepseek-chat"],
+    qwen: ["https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"],
+    doubao: ["https://ark.cn-beijing.volces.com/api/v3", ""],
+    custom: ["", ""]
+  };
+
+  function aProviderChanged() {
+    var v = aiProvider.value;
+    if (v === "custom") {
+      aiCustomBox.classList.remove("hidden");
+    } else {
+      aiCustomBox.classList.add("hidden");
+      aiBaseUrl.value = AI_PROVIDERS[v][0];
+      if (AI_PROVIDERS[v][1]) aiModel.value = AI_PROVIDERS[v][1];
+    }
+  }
+  aiProvider.addEventListener("change", aProviderChanged);
+
+  function aSetStatus(text, cls) {
+    aiStatus.textContent = text;
+    aiStatus.className = "modal-status" + (cls ? " " + cls : "");
+  }
+
+  function aCollect() {
+    return {
+      enabled: aiEnabled.value === "1",
+      provider: aiProvider.value,
+      base_url: aiBaseUrl.value.trim(),
+      model: aiModel.value.trim(),
+      api_key: aiKey.value
+    };
+  }
+
+  function sProviderChanged() {
+    var v = sProvider.value;
+    if (v === "custom") {
+      sBox.classList.remove("hidden");
+    } else {
+      sBox.classList.add("hidden");
+      sHost.value = PROVIDERS[v][0];
+      sPort.value = PROVIDERS[v][1];
+    }
+  }
+  sProvider.addEventListener("change", sProviderChanged);
+
+  function sSetStatus(text, cls) {
+    sStatus.textContent = text;
+    sStatus.className = "modal-status" + (cls ? " " + cls : "");
+  }
+
+  function sCollect() {
+    return {
+      freq: sFreq.value,
+      smtp_host: sHost.value.trim(),
+      smtp_port: parseInt(sPort.value || "465", 10),
+      smtp_user: sUser.value.trim(),
+      smtp_pass: sPass.value,
+      mail_to: sTo.value.trim(),
+      balance_threshold: parseFloat(sThreshold.value || "0")
+    };
+  }
+
+  function openSettings() {
+    sModal.classList.remove("hidden");
+    sSetStatus("", "");
+    fetch(apiUrl("/api/push-get")).then(function (r) {
+      if (r.status === 401) throw new Error("需要访问口令，请先输入口令。");
+      return r.json();
+    }).then(function (d) {
+      var p = d.push || {};
+      sFreq.value = p.freq || "weekly";
+      var host = p.smtp_host || "smtp.qq.com";
+      if (host === "smtp.qq.com") { sProvider.value = "qq"; }
+      else if (host === "smtp.163.com") { sProvider.value = "163"; }
+      else { sProvider.value = "custom"; }
+      sProviderChanged();
+      if (sProvider.value === "custom") {
+        sHost.value = p.smtp_host || "";
+        sPort.value = p.smtp_port || 465;
+      }
+      sUser.value = p.smtp_user || "";
+      sPass.value = "";
+      sTo.value = p.mail_to || "";
+      sThreshold.value = p.balance_threshold || 0;
+      sPassHint.textContent = p.smtp_pass_set ? "（已设置，留空保持不变）" : "（未设置）";
+    }).catch(function (e) { sSetStatus(e.message || "读取配置失败。", "err"); });
+    fetch(apiUrl("/api/ai-get")).then(function (r) {
+      if (r.status === 401) throw new Error("需要访问口令，请先输入口令。");
+      return r.json();
+    }).then(function (d) {
+      var a = d.ai || {};
+      aiEnabled.value = a.enabled ? "1" : "0";
+      var prov = a.provider || "deepseek";
+      if (!AI_PROVIDERS[prov]) prov = "deepseek";
+      aiProvider.value = prov;
+      aProviderChanged();
+      if (prov === "custom") {
+        aiBaseUrl.value = a.base_url || "";
+        aiModel.value = a.model || "";
+      } else {
+        aiModel.value = a.model || AI_PROVIDERS[prov][1] || "";
+      }
+      aiKey.value = "";
+      aiKeyHint.textContent = a.api_key_set ? "（已设置，留空保持不变）" : "（未设置）";
+      aiPreview.classList.add("hidden");
+    }).catch(function (e) { aSetStatus(e.message || "读取 AI 配置失败。", "err"); });
+  }
+
+  function closeSettings() { sModal.classList.add("hidden"); }
+  sBtn.addEventListener("click", openSettings);
+  sCancel.addEventListener("click", closeSettings);
+  sModal.addEventListener("click", function (e) { if (e.target === sModal) closeSettings(); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !sModal.classList.contains("hidden")) closeSettings();
+  });
+
+  sSave.addEventListener("click", function () {
+    sSave.disabled = true;
+    sSetStatus("正在保存……", "info");
+    Promise.all([
+      fetch(apiUrl("/api/push-set"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sCollect())
+      }).then(function (r) { return r.json(); }),
+      fetch(apiUrl("/api/ai-set"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(aCollect())
+      }).then(function (r) { return r.json(); })
+    ]).then(function (rs) {
+      var d1 = rs[0], d2 = rs[1];
+      if (d1.status === "ok" && d2.status === "ok") {
+        sSetStatus("已保存，立即生效。", "ok");
+        sPass.value = "";
+        sPassHint.textContent = d1.push && d1.push.smtp_pass_set ? "（已设置，留空保持不变）" : "（未设置）";
+        aiKey.value = "";
+        aiKeyHint.textContent = d2.ai && d2.ai.api_key_set ? "（已设置，留空保持不变）" : "（未设置）";
+      } else {
+        sSetStatus((d1.message || d2.message || "保存失败，请稍后重试。"), "err");
+      }
+    }).catch(function () { sSetStatus("保存失败，请稍后重试。", "err"); })
+      .finally(function () { sSave.disabled = false; });
+  });
+
+  sTest.addEventListener("click", function () {
+    sTest.disabled = true;
+    sSetStatus("正在发送测试邮件……", "info");
+    fetch(apiUrl("/api/push-test"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sCollect())
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      sSetStatus(d.message || "发送结果", d.status === "ok" ? "ok" : "err");
+    }).catch(function () { sSetStatus("发送失败，请稍后重试。", "err"); })
+      .finally(function () { sTest.disabled = false; });
+  });
+
+  aiTest.addEventListener("click", function () {
+    aiTest.disabled = true;
+    aSetStatus("正在生成 AI 解读（约 10~40 秒）……", "info");
+    fetch(apiUrl("/api/ai-test"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(aCollect())
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.status === "ok") {
+        aSetStatus(d.message || "生成成功。", "ok");
+        aiPreview.textContent = d.analysis || "";
+        aiPreview.classList.remove("hidden");
+      } else {
+        aSetStatus(d.message || "生成失败。", "err");
+      }
+    }).catch(function () { aSetStatus("生成失败，请稍后重试。", "err"); })
+      .finally(function () { aiTest.disabled = false; });
+  });
+})();
+</script>
+</body>
+</html>
