@@ -1184,7 +1184,7 @@
       "destination_or_source": "native computed",
       "meaning": "保留探针，当前为空",
       "official_match": "conditional",
-n      "official_match_label": "由 SDK 配置/能力决定；目标 App 应保持相同存在性",
+      "official_match_label": "由 SDK 配置/能力决定；目标 App 应保持相同存在性",
       "lifetime": "app_version",
       "lifetime_label": "App/SDK 版本期",
       "change_rule": "保持官方空值",
