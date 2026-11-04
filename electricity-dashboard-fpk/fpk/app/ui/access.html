@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>用电总览 · 访问验证</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(1200px 600px at 20% -10%, #1e293b 0%, #0f172a 55%, #020617 100%);
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    color: #e2e8f0;
+  }
+  .card {
+    width: 340px;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 16px;
+    padding: 32px 28px 28px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  }
+  h1 { font-size: 18px; font-weight: 600; margin-bottom: 6px; letter-spacing: 1px; }
+  .sub { font-size: 12.5px; color: #94a3b8; margin-bottom: 24px; line-height: 1.6; }
+  label { display: block; font-size: 13px; color: #cbd5e1; margin-bottom: 8px; }
+  input {
+    width: 100%;
+    padding: 11px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(2, 6, 23, 0.7);
+    color: #f1f5f9;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input:focus { border-color: #38bdf8; }
+  button {
+    width: 100%;
+    margin-top: 16px;
+    padding: 11px 0;
+    border: none;
+    border-radius: 10px;
+    background: #0284c7;
+    color: #fff;
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover { background: #0369a1; }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .msg {
+    margin-top: 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 20px;
+    color: #f87171;
+  }
+  .msg.ok { color: #4ade80; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>用电总览 · 访问验证</h1>
+  <div class="sub" id="sub">正在检查访问口令状态…</div>
+  <form id="form" style="display:none">
+    <label id="pwLabel" for="pw">访问口令</label>
+    <input type="password" id="pw" autocomplete="off" autofocus>
+    <button type="submit" id="btn">验证</button>
+  </form>
+  <div class="msg" id="msg"></div>
+</div>
+<script>
+(function () {
+  var sub = document.getElementById("sub");
+  var form = document.getElementById("form");
+  var pw = document.getElementById("pw");
+  var msg = document.getElementById("msg");
+  var btn = document.getElementById("btn");
+
+  function show(m, ok) { msg.className = "msg" + (ok ? " ok" : ""); msg.textContent = m; }
+
+  fetch("api/status")
+    .then(function (r) { return r.json(); })
+    .then(function (s) {
+      if (s.access_set) {
+        sub.textContent = "看板数据已加密保护，输入访问口令后进入。";
+        pwLabel.textContent = "访问口令";
+        btn.textContent = "进入看板";
+      } else {
+        sub.textContent = "首次使用：请设置访问口令（至少 8 位），设置后立即生效。";
+        pwLabel.textContent = "设置访问口令（至少 8 位）";
+        btn.textContent = "设置并进入";
+      }
+      form.style.display = "block";
+    })
+    .catch(function () { show("无法连接服务，请稍后重试。"); });
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var p = pw.value;
+    if (!p) { show("请输入口令。"); return; }
+    var setting = btn.textContent.indexOf("设置") === 0;
+    btn.disabled = true;
+    msg.className = "msg";
+    msg.textContent = "";
+    fetch(setting ? "api/access-set" : "api/access", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: p })
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (res.ok && res.j.status === "ok") {
+          show("成功，正在进入…", true);
+          setTimeout(function () { location.href = "./"; }, 300);
+        } else {
+          show(res.j.message || "操作失败。");
+          btn.disabled = false;
+        }
+      })
+      .catch(function () { show("网络错误，请重试。"); btn.disabled = false; });
+  });
+})();
+</script>
+</body>
+</html>
