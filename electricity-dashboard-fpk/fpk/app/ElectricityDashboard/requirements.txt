@@ -1,0 +1,4 @@
+aiohttp>=3.9
+cryptography>=42
+gmssl>=3.2.2
+tzdata
