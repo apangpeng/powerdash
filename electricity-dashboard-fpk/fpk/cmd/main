@@ -1,0 +1,141 @@
+#!/bin/bash
+# 用电总览 · fnOS 应用生命周期脚本（start/stop/status）
+# 由飞牛应用中心调用；TRIM_APPDEST / TRIM_PKGVAR / TRIM_SERVICE_PORT 由系统注入。
+set -e
+
+# 应用目录：优先 TRIM_APPDEST（安装后的实际位置），否则回退到打包目录
+if [ -n "${TRIM_APPDEST:-}" ] && [ -d "${TRIM_APPDEST}/ElectricityDashboard" ]; then
+  APP_DIR="${TRIM_APPDEST}/ElectricityDashboard"
+else
+  APP_DIR="$(cd "$(dirname "$0")/../app/ElectricityDashboard" && pwd)"
+fi
+# 数据目录：config/token/data.js 等运行时文件全部落在这里（应用目录只读）
+DATA_DIR="${TRIM_PKGVAR:-/var/packages/powerdash/var}"
+PORT="${TRIM_SERVICE_PORT:-${ELECTRICITY_PORT:-8776}}"
+PID_FILE="${DATA_DIR}/electricity-dashboard.pid"
+LOG_FILE="${DATA_DIR}/electricity-dashboard.log"
+LOG_MAX_BYTES=1048576
+# 前端与后端同源：页面由 ui/index.cgi 提供，后端只监听 127.0.0.1
+UI_DIR="$(cd "$APP_DIR/.." && pwd)/ui"
+PYTHON="python3"
+# Python 依赖装在应用数据目录（包用户可写，无需 root）
+LIBS_DIR="$DATA_DIR/pylibs"
+export PIP_CACHE_DIR="$DATA_DIR/.pipcache"
+
+mkdir -p "$DATA_DIR"
+
+is_running() {
+  if [ -f "$PID_FILE" ]; then
+    PID="$(cat "$PID_FILE")"
+    if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
+# 依赖就位（安装阶段 install_init 已把依赖装到数据目录 pylibs，这里兜底）：
+#   1) 已就绪（系统或数据目录 pylibs）-> 直接用，秒起
+#   2) 包内 wheels 离线装到数据目录 pylibs（免联网）
+#   3) 在线清华镜像装到数据目录 pylibs
+ensure_deps() {
+  PIP_MIRROR="-i https://pypi.tuna.tsinghua.edu.cn/simple"
+  PIP_FLAGS="--disable-pip-version-check --quiet --timeout 30 --retries 2"
+  export PYTHONPATH="$LIBS_DIR"
+
+  if python3 -c "import aiohttp, gmssl, cryptography, tzdata" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  PY_TAG="cp$(python3 -c 'import sys; print(str(sys.version_info.major) + str(sys.version_info.minor))' 2>/dev/null || echo 0)"
+  WHEELS_DIR="$APP_DIR/wheels/$PY_TAG"
+
+  if [ -d "$WHEELS_DIR" ] && [ -n "$(ls -A "$WHEELS_DIR" 2>/dev/null)" ]; then
+    if python3 -m pip install --target "$LIBS_DIR" --no-index --find-links "$WHEELS_DIR" $PIP_FLAGS -r "$APP_DIR/requirements.txt" >> "$LOG_FILE" 2>&1 && \
+       python3 -c "import aiohttp, gmssl, cryptography, tzdata" >/dev/null 2>&1; then
+      return 0
+    fi
+  fi
+
+  # 系统 python3 缺 pip 时先 ensurepip
+  if ! python3 -m pip --version >/dev/null 2>&1; then
+    python3 -m ensurepip --default-pip >> "$LOG_FILE" 2>&1 || true
+  fi
+  if python3 -m pip install --target "$LIBS_DIR" $PIP_FLAGS $PIP_MIRROR -r "$APP_DIR/requirements.txt" >> "$LOG_FILE" 2>&1 && \
+     python3 -c "import aiohttp, gmssl, cryptography, tzdata" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "依赖安装失败（aiohttp/cryptography/gmssl/tzdata），日志：$LOG_FILE；NAS python 版本 $(python3 --version 2>&1)，包内仅内置 cp311/cp312 离线依赖。" >&2
+  [ -n "${TRIM_TEMP_LOGFILE:-}" ] && tail -n 40 "$LOG_FILE" >> "$TRIM_TEMP_LOGFILE"
+  return 1
+}
+
+seed_data_dir() {
+  # 首次安装：把包内默认文件（示例数据、空配置模板、设备画像）种到数据目录
+  if [ ! -f "$DATA_DIR/data.js" ]; then
+    cp -f "$UI_DIR/data.js" "$DATA_DIR/data.js" 2>/dev/null || true
+  fi
+  if [ ! -f "$DATA_DIR/config.json" ]; then
+    cp -f "$APP_DIR/config.json" "$DATA_DIR/config.json" 2>/dev/null || true
+  fi
+  if [ ! -f "$DATA_DIR/device_state.json" ]; then
+    cp -f "$APP_DIR/device_state.json" "$DATA_DIR/device_state.json" 2>/dev/null || true
+  fi
+}
+
+case "${1:-}" in
+  start)
+    if is_running; then
+      exit 0
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+      echo "需要系统自带的 python3，但未找到。" >&2
+      exit 1
+    fi
+    seed_data_dir
+    if ! ensure_deps; then
+      exit 1
+    fi
+    if [ -f "$LOG_FILE" ] && [ "$(wc -c < "$LOG_FILE")" -gt "$LOG_MAX_BYTES" ]; then
+      mv -f "$LOG_FILE" "$LOG_FILE.1"
+    fi
+    cd "$APP_DIR"
+    # 监听 0.0.0.0/::（IPv4+IPv6 双栈），局域网可用 http://<NAS_IP>:8776/ 直接访问
+    nohup env DASHBOARD_PORT="$PORT" DASHBOARD_DATA_DIR="$DATA_DIR" PYTHONPATH="$LIBS_DIR" "$PYTHON" "$APP_DIR/serve_dashboard.py" \
+      >> "$LOG_FILE" 2>&1 &
+    echo $! > "$PID_FILE"
+    sleep 1
+    if ! is_running; then
+      echo "服务启动失败，请查看日志 $LOG_FILE" >&2
+      [ -n "${TRIM_TEMP_LOGFILE:-}" ] && tail -n 20 "$LOG_FILE" >> "$TRIM_TEMP_LOGFILE"
+      rm -f "$PID_FILE"
+      exit 1
+    fi
+    ;;
+  stop)
+    if is_running; then
+      PID="$(cat "$PID_FILE")"
+      kill "$PID" 2>/dev/null || true
+      for _ in 1 2 3 4 5; do
+        if ! kill -0 "$PID" 2>/dev/null; then
+          break
+        fi
+        sleep 1
+      done
+      if kill -0 "$PID" 2>/dev/null; then
+        kill -9 "$PID" 2>/dev/null || true
+      fi
+    fi
+    rm -f "$PID_FILE"
+    ;;
+  status)
+    if is_running; then
+      exit 0
+    fi
+    exit 3
+    ;;
+  *)
+    exit 1
+    ;;
+esac

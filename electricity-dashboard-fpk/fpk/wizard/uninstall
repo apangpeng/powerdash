@@ -1,0 +1,11 @@
+[
+    {
+        "stepTitle": "卸载用电总览",
+        "items": [
+            {
+                "type": "tips",
+                "helpText": "卸载后应用数据（config.json、token.json、data.js 等）会一并删除，网上国网登录状态将失效；重新安装后需在页面右上角重新登录。"
+            }
+        ]
+    }
+]

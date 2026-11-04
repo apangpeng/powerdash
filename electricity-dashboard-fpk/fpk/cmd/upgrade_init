@@ -1,0 +1,3 @@
+#!/bin/bash
+# 升级前调用：数据目录（venv/config/token/data.js）跨升级保留，无需迁移。
+exit 0

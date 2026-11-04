@@ -1,0 +1,13 @@
+{
+    ".url": {
+        "powerdash.Application": {
+            "title": "用电总览",
+            "desc": "网上国网用电看板：日用电、分时电量与月度账单",
+            "icon": "images/icon_{0}.png",
+            "type": "iframe",
+            "protocol": "http",
+            "url": "/cgi/ThirdParty/powerdash/index.cgi/",
+            "allUsers": true
+        }
+    }
+}

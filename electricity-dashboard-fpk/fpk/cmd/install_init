@@ -1,0 +1,47 @@
+#!/bin/bash
+# 安装阶段预装 Python 依赖到「应用数据目录」：
+#   $DATA_DIR/pylibs  ← pip --target 安装（离线 wheels 优先，在线清华镜像兜底）
+# 数据目录归应用包用户所有，无需 root、不碰 /home、不写系统目录。
+# 无论成败都 exit 0（不阻塞安装），启动时 cmd/main 会再兜底重试。
+APP_DIR="$(cd "$(dirname "$0")/../app/ElectricityDashboard" && pwd)"
+DATA_DIR="${TRIM_PKGVAR:-/var/packages/powerdash/var}"
+LOG_FILE="${DATA_DIR}/install.log"
+LIBS_DIR="$DATA_DIR/pylibs"
+mkdir -p "$DATA_DIR" 2>/dev/null || true
+command -v python3 >/dev/null 2>&1 || exit 0
+
+PY_TAG="cp$(python3 -c 'import sys; print(str(sys.version_info.major) + str(sys.version_info.minor))' 2>/dev/null || echo 0)"
+WHEELS_DIR="$APP_DIR/wheels/$PY_TAG"
+PIP_MIRROR="-i https://pypi.tuna.tsinghua.edu.cn/simple"
+PIP_FLAGS="--disable-pip-version-check --quiet --timeout 30 --retries 2"
+# 缓存也放数据目录，避免写 /home/powerdash/.cache 的权限问题
+export PIP_CACHE_DIR="$DATA_DIR/.pipcache"
+export PYTHONPATH="$LIBS_DIR"
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') python3=$(python3 --version 2>&1) tag=$PY_TAG user=$(id -un 2>/dev/null)" >> "$LOG_FILE"
+
+install_libs() {
+  python3 -m pip install --target "$LIBS_DIR" "$@" -r "$APP_DIR/requirements.txt" >> "$LOG_FILE" 2>&1
+}
+
+ready() {
+  python3 -c "import aiohttp, gmssl, cryptography, tzdata" >/dev/null 2>&1
+}
+
+# 1) 离线：包内 wheels 与 NAS python 版本匹配
+if [ -d "$WHEELS_DIR" ] && [ -n "$(ls -A "$WHEELS_DIR" 2>/dev/null)" ]; then
+  if install_libs --no-index --find-links "$WHEELS_DIR" && ready; then
+    echo "依赖已离线安装到数据目录（$PY_TAG wheels）" >> "$LOG_FILE"
+    exit 0
+  fi
+  echo "离线安装未成功，回退在线安装" >> "$LOG_FILE"
+fi
+
+# 2) 在线兜底（清华镜像）
+if ! python3 -m pip --version >/dev/null 2>&1; then
+  python3 -m ensurepip --default-pip >> "$LOG_FILE" 2>&1 || true
+fi
+if install_libs $PIP_MIRROR $PIP_FLAGS && ready; then
+  echo "依赖已在线安装到数据目录" >> "$LOG_FILE"
+fi
+exit 0
