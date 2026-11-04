@@ -1,0 +1,34 @@
+{
+  "phone": "",
+  "password": "",
+  "account_index": 0,
+  "days": 30,
+  "province": "",
+  "city": "",
+  "region": "",
+  "access_password": "",
+  "daily_refresh": true,
+  "refresh_hour": 8,
+  "push": {
+    "channel": "mail",
+    "smtp_host": "smtp.qq.com",
+    "smtp_port": 465,
+    "smtp_user": "",
+    "smtp_pass": "",
+    "mail_to": "",
+    "freq": "weekly",
+    "balance_threshold": 0
+  },
+  "ai": {
+    "enabled": false,
+    "provider": "deepseek",
+    "base_url": "https://api.deepseek.com/v1",
+    "model": "deepseek-chat",
+    "api_key": ""
+  },
+  "tier_prices": {
+    "base": 0.5,
+    "tier2_add": 0.05,
+    "tier3_add": 0.3
+  }
+}
