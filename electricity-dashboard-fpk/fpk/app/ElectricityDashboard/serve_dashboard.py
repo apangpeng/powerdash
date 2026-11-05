@@ -442,7 +442,7 @@ def build_mail_text(obj: dict) -> str:
     if "上月用电" in stats:
         lines.append(f"上月用电：{_num(stats['上月用电']['v'])} kWh")
     if "上月电费" in stats:
-        lines.append(f"上月电费：¥{_num(stats['上月电费']['v'])} ")
+        lines.append(f"上月电费：¥{_num(stats['上月电费']['v'])}")
     if "本年电费" in stats:
         lines.append(f"本年电费：¥{_num(stats['本年电费']['v'])}")
     if tier:
